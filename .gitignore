@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+
+# Project output
+output/
+
+# Model weights (auto-downloaded on first run)
+*.pt
+
+# Large media/test assets
+*.mp4
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
