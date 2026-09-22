@@ -4,6 +4,11 @@ Video decoding + inference pipeline: decodes a video frame by frame, resizes
 frames to 720x1280 RGB, samples them at 10 inferences per second, and runs
 YOLOv8n (pretrained on COCO) object detection on each sampled frame.
 
+Two independent ways to run it — pick whichever you prefer, neither
+requires the other: a local virtual environment (**Setup** / **Usage**
+below), or a container (**Docker** below, for a reproducible environment
+without installing Python 3.14 locally).
+
 ## Requirements
 
 - Python 3.14
@@ -54,6 +59,62 @@ Running the script writes to `output/` (created automatically):
   detections
 - `output/run.log` — execution log (progress every 10 processed frames,
   total execution time, video metadata)
+
+## Docker
+
+An alternative to the **Setup**/**Usage** above, not a replacement — both
+run the same `infer.py` unmodified, so use whichever fits (native tends to
+be faster on Apple Silicon, see the note below; Docker needs no local
+Python install). A `Dockerfile` is provided for a reproducible environment
+(pinned Python
+version, system libraries `ffmpeg`/`libgl1` that `requirements.txt` alone
+doesn't cover). PyTorch is installed from the CPU-only wheel index —
+installing it from the default PyPI index on Linux otherwise pulls in
+several GB of unused CUDA packages.
+
+Build the image:
+
+```bash
+docker build -t skillcorner-test .
+```
+
+Run it, mounting the video, the model weights (to skip re-downloading),
+and an output directory:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/cut.mp4:/data/cut.mp4:ro" \
+  -v "$(pwd)/yolov8n.pt:/app/yolov8n.pt:ro" \
+  -v "$(pwd)/output:/app/output" \
+  skillcorner-test /data/cut.mp4 --output-dir /app/output
+```
+
+**Note:** on macOS, Docker Desktop runs containers in a Linux VM, so this
+loses the native CPU optimizations PyTorch's macOS build has (and CoreML
+is unavailable inside the container entirely — it's macOS-only).
+
+The VM also reports all of the host's logical CPUs (10 on this Apple M4),
+but PyTorch on macOS auto-detects and sticks to the 4 performance cores,
+avoiding the efficiency cores for compute; that distinction doesn't exist
+inside the Linux VM, so PyTorch defaults to 10 threads there and
+over-subscribes. Explicitly capping it with `OMP_NUM_THREADS` (set to `4`
+by default in the `Dockerfile`, matching what macOS picks natively) closes
+most of that gap:
+
+| Config | Total time (3000 frames) | vs. native |
+|---|---|---|
+| Native (macOS, PyTorch auto: 4 threads) | 61.6s | — |
+| Docker, default threads (10, over-subscribed) | 213.7s | 3.5x slower |
+| Docker, `OMP_NUM_THREADS=4` | 117.9s | 1.9x slower |
+
+The remaining ~1.9x gap is the Accelerate-framework CPU kernels PyTorch's
+macOS build has and the generic Linux ARM build doesn't — there's no way
+to recover that from inside a Linux container. Docker here is for
+environment reproducibility, not representative performance numbers;
+always benchmark on the real deployment target, and re-tune
+`OMP_NUM_THREADS` for its actual core layout (e.g. via `docker run -e
+OMP_NUM_THREADS=<n>`, matching physical/performance core count, not
+`nproc`).
 
 ## Performance analysis
 

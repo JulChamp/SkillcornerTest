@@ -1,0 +1,12 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+output/
+output_*/
+*.mp4
+*.pt
+*.onnx
+*.mlpackage
+README.md
