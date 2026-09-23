@@ -48,6 +48,10 @@ Optional flags:
 - `--output-dir <dir>`: change the output directory (default: `output`)
 - `--model <path-or-name>`: use a different YOLO model instead of the
   default `yolov8n.pt` (auto-downloaded if not found locally)
+- `--device <device>`: inference device passed to Ultralytics (e.g. `cpu`,
+  `mps`, `cuda:0`); defaults to CPU. On Apple Silicon, `--device mps` runs
+  inference on the GPU via PyTorch's Metal backend — see **Performance
+  analysis** below for the speedup.
 
 ## Output
 
@@ -159,15 +163,29 @@ requested).
 
 | Model | Backend | Total time (3000 frames) | ms / sampled frame |
 |---|---|---|---|
-| YOLOv8n (3.1M params) | PyTorch `.pt` | 61.6s | 20.5ms |
-| YOLOv8n | ONNX Runtime `.onnx` | 71.6–90.0s* | 23.9–30.0ms |
+| YOLOv8n (3.1M params) | PyTorch `.pt`, CPU | 61.6s | 20.5ms |
+| YOLOv8n | ONNX Runtime `.onnx`, CPU | 71.6–90.0s* | 23.9–30.0ms |
 | YOLOv8n | CoreML `.mlpackage` (Neural Engine) | 67.7s | 22.6ms |
-| YOLOv8m (25.9M params) | PyTorch `.pt` | 255.7s | 85.2ms |
-| YOLOv8m | ONNX Runtime `.onnx` | 411.2s | 137.1ms |
+| YOLOv8m (25.9M params) | PyTorch `.pt`, CPU | 255.7s | 85.2ms |
+| YOLOv8m | ONNX Runtime `.onnx`, CPU | 411.2s | 137.1ms |
+| **YOLOv8m** | **PyTorch `.pt`, `--device mps`** | **135.2s** | **45.1ms** |
 
 \* ONNX showed run-to-run variance; explicit `intra_op_num_threads` tuning
 (2/4/6/8/10) was tested and never beat ONNX Runtime's own default
 auto-threading.
+
+**MPS (Apple GPU via PyTorch's Metal backend) is the one optimization that
+actually paid off** — a genuine 1.9x speedup on YOLOv8m (256.3s → 135.2s),
+unlike ONNX/CoreML which were both slower than plain CPU. Detections match
+the CPU run exactly on the aggregate stats (13.78 avg detections/frame,
+16 detections on the `t=150s` sample frame used in the model comparison
+above) — same PyTorch engine, just a different backend, not a different
+runtime with its own numerical quirks. Isolated (decode-free) benchmarking
+showed an even larger 2.4x gain (76.6ms → 31.9ms/frame); the full-pipeline
+number is smaller because video decode/resize now makes up a bigger share
+of the total time once inference itself gets faster. `--device mps` is
+only available on Apple Silicon; on other targets, benchmark `cuda` if a
+GPU is present, otherwise CPU is the only option.
 
 **Findings:**
 
@@ -191,9 +209,12 @@ auto-threading.
   small/distant players. A real accuracy gain would require fine-tuning on
   football footage (e.g. SoccerNet), which was out of scope here.
 
-**Conclusion:** on this machine, plain PyTorch inference is both the
-fastest and the simplest option — no export step, no extra dependencies.
-The ONNX/CoreML results here are specific to Apple Silicon CPU inference
-and shouldn't be assumed to generalize to other targets (e.g. an x86
-server with AVX-512/oneDNN might favor ONNX Runtime); re-benchmark on the
-actual deployment hardware before switching backends.
+**Conclusion:** exporting to a different runtime (ONNX, CoreML) isn't
+worth it here — plain PyTorch beats both on CPU, no export step or extra
+dependencies needed. The real win is `--device mps`: same PyTorch engine,
+same weights file, one flag, 1.9x faster on YOLOv8m. On Apple Silicon
+there's no reason not to use it. These results are specific to this
+Apple Silicon machine's CPU/GPU and shouldn't be assumed to generalize to
+other targets (e.g. an x86 server with AVX-512/oneDNN might favor ONNX
+Runtime, or have a CUDA GPU to target with `--device cuda`); re-benchmark
+on the actual deployment hardware before switching backends or devices.

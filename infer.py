@@ -105,9 +105,11 @@ def resize_frame(frame: np.ndarray) -> np.ndarray:
     return cv2.resize(frame, (TARGET_WIDTH, TARGET_HEIGHT), interpolation=cv2.INTER_LINEAR)
 
 
-def run_inference(model: YOLO, frame_rgb: np.ndarray) -> list:
+def run_inference(model: YOLO, frame_rgb: np.ndarray, device: str | None = None) -> list:
     """Run YOLO detection on an RGB frame and return a list of detections."""
-    results = cast(list, model.predict(frame_rgb, conf=CONF_THRESHOLD, verbose=False, stream=False))[0]
+    results = cast(
+        list, model.predict(frame_rgb, conf=CONF_THRESHOLD, verbose=False, stream=False, device=device)
+    )[0]
     results = cast(Results, results)
     detections = []
     boxes = results.boxes if results.boxes is not None else []
@@ -153,6 +155,12 @@ def main():
         type=str,
         default=MODEL_WEIGHTS,
         help=f"Path to YOLO model weights (default: {MODEL_WEIGHTS}, auto-downloaded if not found locally)",
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default=None,
+        help="Inference device passed to Ultralytics (e.g. 'cpu', 'mps', 'cuda:0'); default lets Ultralytics choose (CPU here).",
     )
     args = parser.parse_args()
 
@@ -217,7 +225,7 @@ def main():
         frame_rgb = ensure_rgb(resized)
 
         # 3) Run inference
-        detections = run_inference(model, frame_rgb)
+        detections = run_inference(model, frame_rgb, device=args.device)
 
         results_out.append(
             {
@@ -266,6 +274,7 @@ def main():
         "video_metadata": metadata,
         "inference_config": {
             "model": args.model,
+            "device": args.device or "cpu (default)",
             "task": "object_detection",
             "classes": model.names,
             "confidence_threshold": CONF_THRESHOLD,
