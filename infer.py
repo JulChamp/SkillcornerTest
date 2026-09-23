@@ -105,10 +105,13 @@ def resize_frame(frame: np.ndarray) -> np.ndarray:
     return cv2.resize(frame, (TARGET_WIDTH, TARGET_HEIGHT), interpolation=cv2.INTER_LINEAR)
 
 
-def run_inference(model: YOLO, frame_rgb: np.ndarray, device: str | None = None) -> list:
+def run_inference(model: YOLO, frame_rgb: np.ndarray, device: str | None = None, half: bool = False) -> list:
     """Run YOLO detection on an RGB frame and return a list of detections."""
     results = cast(
-        list, model.predict(frame_rgb, conf=CONF_THRESHOLD, verbose=False, stream=False, device=device)
+        list,
+        model.predict(
+            frame_rgb, conf=CONF_THRESHOLD, verbose=False, stream=False, device=device, quantize=16 if half else None
+        ),
     )[0]
     results = cast(Results, results)
     detections = []
@@ -161,6 +164,11 @@ def main():
         type=str,
         default=None,
         help="Inference device passed to Ultralytics (e.g. 'cpu', 'mps', 'cuda:0'); default lets Ultralytics choose (CPU here).",
+    )
+    parser.add_argument(
+        "--half",
+        action="store_true",
+        help="Run inference in FP16 (half precision) instead of FP32. Only effective on 'mps' or 'cuda' devices.",
     )
     args = parser.parse_args()
 
@@ -225,7 +233,7 @@ def main():
         frame_rgb = ensure_rgb(resized)
 
         # 3) Run inference
-        detections = run_inference(model, frame_rgb, device=args.device)
+        detections = run_inference(model, frame_rgb, device=args.device, half=args.half)
 
         results_out.append(
             {
@@ -275,6 +283,7 @@ def main():
         "inference_config": {
             "model": args.model,
             "device": args.device or "cpu (default)",
+            "half": args.half,
             "task": "object_detection",
             "classes": model.names,
             "confidence_threshold": CONF_THRESHOLD,
