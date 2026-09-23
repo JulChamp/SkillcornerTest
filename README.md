@@ -116,6 +116,33 @@ always benchmark on the real deployment target, and re-tune
 OMP_NUM_THREADS=<n>`, matching physical/performance core count, not
 `nproc`).
 
+## Model comparison: YOLOv8n vs YOLOv8m
+
+Same video, same frame (`t=150.00s`, sample index 1500), same confidence
+threshold (`conf=0.35`) — only the model changes:
+
+| YOLOv8n (nano) | YOLOv8m (medium) |
+|---|---|
+| ![YOLOv8n detections at t=150s](assets/comparison/sample_1500_yolov8n.jpg) | ![YOLOv8m detections at t=150s](assets/comparison/sample_1500_yolov8m.jpg) |
+| 14 `person` detections | 16 `person` detections |
+
+YOLOv8m picks up 2 additional players on this frame that YOLOv8n misses —
+consistent with the aggregate numbers below, and expected given YOLOv8m's
+larger backbone handles small/distant/partially-occluded players better.
+
+**Aggregate results over the full video** (3000 sampled frames):
+
+| Model | Avg. detections / frame | Total execution time |
+|---|---|---|
+| YOLOv8n (3.1M params) | 11.98 | 61.6s |
+| YOLOv8m (25.9M params) | 13.78 (+15%) | 256.3s (4.2x slower) |
+
+Trade-off: YOLOv8m finds noticeably more players per frame, but at over
+4x the inference cost. Whether that's worth it depends on the use case —
+real-time/interactive tooling would likely favor YOLOv8n's speed, while
+an offline analytics pipeline where recall on distant players matters more
+than latency would favor YOLOv8m.
+
 ## Performance analysis
 
 The pipeline's main cost is the inference call, not video decoding or
