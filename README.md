@@ -126,29 +126,36 @@ OMP_NUM_THREADS=<n>`, matching physical/performance core count, not
 ## Model comparison: YOLOv8n vs YOLOv8m
 
 Same video, same frame (`t=150.00s`, sample index 1500), same confidence
-threshold (`conf=0.35`) — only the model changes:
+threshold (`conf=0.35`) — only the model (and, for the third column, the
+inference config) changes:
 
-| YOLOv8n (nano) | YOLOv8m (medium) |
-|---|---|
-| ![YOLOv8n detections at t=150s](assets/comparison/sample_1500_yolov8n.jpg) | ![YOLOv8m detections at t=150s](assets/comparison/sample_1500_yolov8m.jpg) |
-| 14 `person` detections | 16 `person` detections |
+| YOLOv8n (nano), CPU | YOLOv8m (medium), CPU | YOLOv8m (medium), `--device mps --half` |
+|---|---|---|
+| ![YOLOv8n detections at t=150s](assets/comparison/sample_1500_yolov8n.jpg) | ![YOLOv8m detections at t=150s](assets/comparison/sample_1500_yolov8m.jpg) | ![YOLOv8m detections at t=150s, MPS+FP16](assets/comparison/sample_1500_yolov8m_optimized.jpg) |
+| 14 `person` detections | 16 `person` detections | 16 `person` detections |
 
 YOLOv8m picks up 2 additional players on this frame that YOLOv8n misses —
 consistent with the aggregate numbers below, and expected given YOLOv8m's
 larger backbone handles small/distant/partially-occluded players better.
+Running YOLOv8m through MPS + FP16 (see **Performance analysis** below)
+doesn't change a single detection on this frame — same 16 boxes as the
+CPU/fp32 run — it's purely a speed optimization, not a different result.
 
 **Aggregate results over the full video** (3000 sampled frames):
 
 | Model | Avg. detections / frame | Total execution time |
 |---|---|---|
-| YOLOv8n (3.1M params) | 11.98 | 61.6s |
-| YOLOv8m (25.9M params) | 13.78 (+15%) | 256.3s (4.2x slower) |
+| YOLOv8n (3.1M params), CPU | 11.98 | 61.6s |
+| YOLOv8m (25.9M params), CPU | 13.78 (+15%) | 256.3s (4.2x slower) |
+| YOLOv8m (25.9M params), `--device mps --half` | 13.78 (+15%) | 120.1s (2.0x slower) |
 
-Trade-off: YOLOv8m finds noticeably more players per frame, but at over
-4x the inference cost. Whether that's worth it depends on the use case —
-real-time/interactive tooling would likely favor YOLOv8n's speed, while
-an offline analytics pipeline where recall on distant players matters more
-than latency would favor YOLOv8m.
+Trade-off: YOLOv8m finds noticeably more players per frame. On CPU alone
+that costs over 4x the inference time of YOLOv8n; with `--device mps
+--half` the same accuracy gain costs only ~2x. Whether it's worth it still
+depends on the use case — real-time/interactive tooling would likely favor
+YOLOv8n's speed, while an offline analytics pipeline where recall on
+distant players matters more than latency would favor YOLOv8m, especially
+with the MPS+FP16 optimizations applied.
 
 ## Performance analysis
 
